@@ -36,6 +36,7 @@ def generate_snapshots(input_image_path, output_folder, frame_size=(3840, 1920),
     #        filename = os.path.join(output_folder, f"snapshot_{lon}_{lat}.png")
     #        imageio.imwrite(filename, snapshot)
 
+
     for lat in np.linspace(0, 1, lat_steps, endpoint=False):
         for lon in np.linspace(0, 1, lon_steps, endpoint=False):
     #for lat in np.linspace(0, 1, frame_size[1] // img_size[1], endpoint=False):
