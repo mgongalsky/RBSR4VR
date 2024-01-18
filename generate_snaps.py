@@ -1,5 +1,6 @@
 # import NFOV from eq2rect.py
 from eq2rect import NFOV
+import imageio.v2 as imageio
 import numpy as np
 import os
 
@@ -28,19 +29,8 @@ def generate_snapshots(input_image_path, output_folder, frame_size=(3840, 1920),
 
     images_processed = 0
 
-    # Генерация изображений для различных сферических координат
-    #for lat in np.linspace(0, 1, frame_size[1] // img_size[1]):
-    #    for lon in np.linspace(0, 1, frame_size[0] // img_size[0]):
-    #        center_point = np.array([lon, lat])
-    #        snapshot = nfov.toNFOV(img, center_point)
-    #        filename = os.path.join(output_folder, f"snapshot_{lon}_{lat}.png")
-    #        imageio.imwrite(filename, snapshot)
-
-
     for lat in np.linspace(0, 1, lat_steps, endpoint=False):
         for lon in np.linspace(0, 1, lon_steps, endpoint=False):
-    #for lat in np.linspace(0, 1, frame_size[1] // img_size[1], endpoint=False):
-     #   for lon in np.linspace(0, 1, frame_size[0] // img_size[0], endpoint=False):
             center_point = np.array([lon, lat])
             snapshot = nfov.toNFOV(img, center_point)
 
@@ -57,5 +47,10 @@ def generate_snapshots(input_image_path, output_folder, frame_size=(3840, 1920),
 
     print("\nAll images have been processed.")
 
-# Пример использования
-generate_snapshots('vr_equi_test.png', 'VR_snapshots')
+# Загрузка исходного сферического изображения для определения его размеров
+input_image_path = 'vr_equi_test.png'
+img = imageio.imread(input_image_path, pilmode='RGB')
+frame_height, frame_width = img.shape[:2]
+
+# Вызов функции с размерами исходного изображения
+generate_snapshots(input_image_path, 'VR_snapshots', frame_size=(frame_width, frame_height))
