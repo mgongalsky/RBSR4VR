@@ -90,4 +90,7 @@ mmcv-full==1.7.2 -f https://download.openmmlab.com/mmcv/dist/cu116/torch1.12/ind
 torch==1.12.0+cu116 -f https://download.pytorch.org/whl/cu116
 torchvision==0.13.0+cu116 -f https://download.pytorch.org/whl/cu116
 torchaudio==0.12.0+cu116 -f https://download.pytorch.org/whl/cu116
+opencv-python
+imageio
+
 

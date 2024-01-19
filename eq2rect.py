@@ -17,8 +17,8 @@ import imageio
 import numpy as np
 
 class NFOV():
-    def __init__(self, height=400, width=800, fov=0.45):
-        self.FOV = [fov, fov]
+    def __init__(self, height=400, width=800, h_fov=0.45, v_fov=0.45):
+        self.FOV = [h_fov, v_fov]
         self.PI = pi
         self.PI_2 = pi * 0.5
         self.PI2 = pi * 2.0
@@ -92,8 +92,8 @@ class NFOV():
         #import matplotlib.pyplot as plt
         #plt.imshow(nfov)
         #plt.show()
-        filename = f"nfov_{center_point[0]}_{center_point[1]}.png"
-        imageio.imwrite(filename, nfov)
+        #filename = f"nfov_{center_point[0]}_{center_point[1]}.png"
+        #imageio.imwrite(filename, nfov)
         return nfov
 
     def toNFOV(self, frame, center_point):
