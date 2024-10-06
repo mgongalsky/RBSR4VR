@@ -69,18 +69,26 @@ def process_image(path):
 
     return im_tensor
 
+
 def display_image(image_tensor, title="Processed Image"):
     # Вербозинг для проверки формы перед отображением
     print(f"Tensor shape before displaying: {image_tensor.shape}")
 
-    # Исправим: image_tensor должен быть (C, H, W), а нам нужно преобразовать в (H, W, C)
-    # Используем .permute(1, 2, 0) чтобы получить корректную форму для отображения
+    # Преобразование тензора в NumPy массив
     image_np = image_tensor.cpu().numpy()  # (H, W, C)
-    print(f"Shape after permute: {image_np.shape}")
+    print(f"Shape after conversion to numpy: {image_np.shape}")
 
-    # Используем только первые три канала (RGB) и масштабируем в диапазон [0, 255]
-    image_rgb = image_np[:, :, :3]
+    # Используем первый, второй и четвертый каналы для формирования RGB (игнорируем третий канал)
+    image_rgb = np.stack([image_np[:, :, 0], image_np[:, :, 1], image_np[:, :, 3]], axis=-1)
+
+    # Масштабирование значений от [0, 1023] до [0, 255] для корректного отображения
     image_rgb = np.clip(image_rgb / 1023.0 * 255.0, 0, 255).astype(np.uint8)
+
+    # Отображение
+    plt.imshow(image_rgb)
+    plt.title(title)
+    plt.axis('off')
+    plt.show()
 
     # Отображение
     plt.imshow(image_rgb)
