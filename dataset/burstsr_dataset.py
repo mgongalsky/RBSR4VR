@@ -23,6 +23,7 @@ import shutil
 from dataset.base_rawburst_dataset import BaseRawBurstDataset
 from admin.environment import env_settings
 from data import processing, sampler
+from verbosing_config import verb_data_dim_analysis  # Импортируем уровень вербозинга
 
 
 def load_txt(path):
@@ -239,6 +240,11 @@ import numpy as np
 import torch
 import cv2
 
+import cv2
+import numpy as np
+import torch
+from verbosing_config import verb_data_dim_analysis  # Импортируем уровень вербозинга
+
 class QoocamPNGImage:
     """ Custom class for handling images captured from Qoocam in PNG format """
 
@@ -256,60 +262,79 @@ class QoocamPNGImage:
         if im_raw is None:
             raise FileNotFoundError(f"Image not found at path: {path}")
 
+        # Print the initial dimensions of im_raw (BGR) if verbosing level is 1 or higher
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] Initial im_raw shape (BGR): {im_raw.shape}")
+
         # Convert BGR (used by OpenCV) to RGB
         im_raw = cv2.cvtColor(im_raw, cv2.COLOR_BGR2RGB)
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] im_raw shape after BGR to RGB conversion: {im_raw.shape}")
 
         # Normalize to the range [0, 1] for matrix multiplication
         im_raw = im_raw.astype(np.float32) / 255.0
+        if verb_data_dim_analysis >= 2:  # Detализация на уровне 2
+            print(f"[V2:verb_data_dim_analysis] im_raw shape after normalization to [0, 1]: {im_raw.shape}")
 
         # Define the RGB to Samsung transformation matrix and calculate its inverse
         color_matrix = np.array([[1.2429526, -0.15225857, -0.09069402, 0.0],
                                  [-0.18403465, 1.4261994, -0.24216475, 0.0],
                                  [-0.02236049, -0.6038957, 1.6262562, 0.0]])
-        color_matrix = np.array([[1, 0, 0, 0.0],
-                                 [0, 1, 0, 0.0],
-                                 [0, 0, 1, 0.0]])
-        # Calculate the inverse of the color matrix
         inverse_color_matrix = np.linalg.pinv(color_matrix[:, :3])
 
         # Perform matrix multiplication to transform RGB to Samsung-RAW-like format
         height, width, _ = im_raw.shape
-        reshaped_image = im_raw.reshape(-1, 3)  # (height * width, 3)
+        reshaped_image = im_raw.reshape(-1, 3)
+        if verb_data_dim_analysis >= 2:
+            print(f"[V2:verb_data_dim_analysis] reshaped_image shape before matrix multiplication: {reshaped_image.shape}")
+
         transformed_image = np.matmul(reshaped_image, inverse_color_matrix.T)
-        transformed_image = np.clip(transformed_image, 0, 1)  # Ensure values are in [0, 1]
+        transformed_image = np.clip(transformed_image, 0, 1)
+        if verb_data_dim_analysis >= 2:
+            print(f"[V2:verb_data_dim_analysis] transformed_image shape after matrix multiplication: {transformed_image.shape}")
 
         # Reshape back to original image dimensions and convert to int16
         transformed_image = transformed_image.reshape(height, width, 3)
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] transformed_image shape after reshaping: {transformed_image.shape}")
 
-        # Extracting the channels from the transformed image and creating a 4-channel RAW-like format
+        # Reorganize channels to have RGGB format (Red, Green, Green, Blue)
         red_channel = transformed_image[:, :, 0]
         green_channel = transformed_image[:, :, 1]
         blue_channel = transformed_image[:, :, 2]
-
-        # Reorganize channels to have RGGB format (Red, Green, Green, Blue)
         im_raw = np.dstack((red_channel, green_channel, green_channel, blue_channel))
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] im_raw shape after reorganizing channels to RGGB: {im_raw.shape}")
 
         # Scale the image to match expected input levels
         im_raw = im_raw * 1023.0
         im_raw = im_raw.astype(np.int16)
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] im_raw shape after scaling to int16: {im_raw.shape}")
 
         # Transpose to (C, H, W) format
         im_raw = np.transpose(im_raw, (2, 0, 1))
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] im_raw shape after transpose to (C, H, W): {im_raw.shape}")
 
         # Convert to PyTorch tensor
         im_raw = torch.from_numpy(im_raw)
+        if verb_data_dim_analysis >= 1:
+            print(f"[V1:verb_data_dim_analysis] Tensor shape: {im_raw.shape}")
 
         # Set some dummy metadata for compatibility
         meta_data = {
             'black_level': [0, 0, 0, 0],
             'cam_wb': [1.0, 1.0, 1.0, 1.0],
             'daylight_wb': [1.0, 1.0, 1.0, 1.0],
-            'rgb_xyz_matrix': np.eye(3).tolist(),  # Identity matrix for color transformation
+            'rgb_xyz_matrix': np.eye(3).tolist(),
             'exif_data': {}
         }
 
         return QoocamPNGImage(im_raw, meta_data['black_level'], meta_data['cam_wb'],
                               meta_data['daylight_wb'], meta_data['rgb_xyz_matrix'], meta_data['exif_data'])
+
+
 
     def __init__(self, im_raw, black_level, cam_wb, daylight_wb, rgb_xyz_matrix, exif_data):
         """

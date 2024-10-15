@@ -26,6 +26,7 @@ from models.loss.image_quality_v2 import PSNR, SSIM, LPIPS
 from models.alignment.pwcnet import PWCNet
 from dataset.burstsr_dataset import QoocamPNGImage
 from dataset.burstsr_dataset import BurstSRDataset
+from verbosing_config import verb_data_dim_analysis  # Импортируем уровень вербозинга
 
 
 env_path = os.path.join(os.path.dirname(__file__), '../..')
