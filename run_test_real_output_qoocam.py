@@ -112,6 +112,8 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
             #plt.axis('off')
             #plt.show()
 
+        import torch.nn.functional as F  # Не забудь добавить этот импорт
+
         with torch.no_grad():
             if verb_data_dim_analysis >= 1:
                 print(f"[V1:verb_data_dim_analysis] torch.no_grad() enabled for inference.")
@@ -119,14 +121,12 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
             burst = burst[:, :num_frame, ...]
             net_pred, _ = model(burst)
 
-            # Вербозинг: вывод максимальных и минимальных значений для каждого канала до обрезки (clamp)
+            # Вербозинг: вывод максимальных и минимальных значений для каждого канала до масштабирования
             if verb_data_dim_analysis >= 2:
                 max_values = net_pred.max(dim=2)[0].max(dim=2)[0]  # Максимумы по H и W
                 min_values = net_pred.min(dim=2)[0].min(dim=2)[0]  # Минимумы по H и W
-
                 max_values_str = ', '.join([f'C{c}: {max_values[0, c].item():.4f}' for c in range(max_values.shape[1])])
                 min_values_str = ', '.join([f'C{c}: {min_values[0, c].item():.4f}' for c in range(min_values.shape[1])])
-
                 print(f"[V2:verb_data_dim_analysis] Max values per channel before scaling - {max_values_str}")
                 print(f"[V2:verb_data_dim_analysis] Min values per channel before scaling - {min_values_str}")
 
@@ -137,30 +137,36 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
             if verb_data_dim_analysis >= 2:
                 max_values_scaled = output.max(dim=2)[0].max(dim=2)[0]
                 min_values_scaled = output.min(dim=2)[0].min(dim=2)[0]
-
                 max_values_scaled_str = ', '.join(
                     [f'C{c}: {max_values_scaled[0, c].item():.4f}' for c in range(max_values_scaled.shape[1])])
                 min_values_scaled_str = ', '.join(
                     [f'C{c}: {min_values_scaled[0, c].item():.4f}' for c in range(min_values_scaled.shape[1])])
-
                 print(f"[V2:verb_data_dim_analysis] Max values per channel after scaling - {max_values_scaled_str}")
                 print(f"[V2:verb_data_dim_analysis] Min values per channel after scaling - {min_values_scaled_str}")
 
             # Обрезка значений тензора (чтобы все значения были точно в диапазоне [0, 1])
             output = output.clamp(0.0, 1.0)
 
+            # Сохранение основного изображения
             save_path = os.path.join(output_dir, f'output_{idx}.png')
             save_image(output.squeeze(), save_path)
+            print(f"[V1:verb_data_dim_analysis] Image saved at {save_path}")
 
-            # Вербозинг: вывод максимального и минимального значения для каждого канала
-            max_values = output.max(dim=2)[0].max(dim=2)[0]  # Максимумы по H и W
-            min_values = output.min(dim=2)[0].min(dim=2)[0]  # Минимумы по H и W
+            # Вербозинг: размерности перед интерполяцией
+            if verb_data_dim_analysis >= 2:
+                print(f"[V2:verb_data_dim_analysis] Output shape before interpolation: {output.shape}")
 
-            max_values_str = ', '.join([f'C{c}: {max_values[0, c].item():.4f}' for c in range(max_values.shape[1])])
-            min_values_str = ', '.join([f'C{c}: {min_values[0, c].item():.4f}' for c in range(min_values.shape[1])])
+            # Приведение тензора к нужному формату (N, C, H, W) — предполагаем, что output уже в формате (N, C, H, W)
+            # Уменьшение изображения до 80x80 с билинейной интерполяцией
+            output_resized = F.interpolate(output, size=(80, 80), mode='bilinear', align_corners=False)
 
-            print(f"[Image {idx}] Max values per channel - {max_values_str}")
-            print(f"[Image {idx}] Min values per channel - {min_values_str}")
+            if verb_data_dim_analysis >= 2:
+                print(f"[V2:verb_data_dim_analysis] Resized output shape: {output_resized.shape}")
+
+            # Сохранение уменьшенного изображения
+            resized_save_path = os.path.join(output_dir, f'output_resized_{idx}.png')
+            save_image(output_resized.squeeze(), resized_save_path)
+            print(f"[V1:verb_data_dim_analysis] Resized image saved at {resized_save_path}")
 
 
 if __name__ == "__main__":
