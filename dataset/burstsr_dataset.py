@@ -280,18 +280,35 @@ class QoocamPNGImage:
         color_matrix = np.array([[1.2429526, -0.15225857, -0.09069402, 0.0],
                                  [-0.18403465, 1.4261994, -0.24216475, 0.0],
                                  [-0.02236049, -0.6038957, 1.6262562, 0.0]])
+
+        # Print dimensions of the color_matrix at verbosing level 2
+        if verb_data_dim_analysis >= 2:
+            print(f"[V2:verb_data_dim_analysis] color_matrix shape: {color_matrix.shape}")
+
+        # Calculate the inverse of the color matrix
         inverse_color_matrix = np.linalg.pinv(color_matrix[:, :3])
+
+        # Print dimensions of the inverse matrix at verbosing level 2
+        if verb_data_dim_analysis >= 2:
+            print(f"[V2:verb_data_dim_analysis] inverse_color_matrix shape: {inverse_color_matrix.shape}")
 
         # Perform matrix multiplication to transform RGB to Samsung-RAW-like format
         height, width, _ = im_raw.shape
         reshaped_image = im_raw.reshape(-1, 3)
-        if verb_data_dim_analysis >= 2:
-            print(f"[V2:verb_data_dim_analysis] reshaped_image shape before matrix multiplication: {reshaped_image.shape}")
 
+        # Verbose the reshaped image size before matrix multiplication
+        if verb_data_dim_analysis >= 2:
+            print(
+                f"[V2:verb_data_dim_analysis] reshaped_image shape before matrix multiplication: {reshaped_image.shape}")
+
+        # Apply the matrix multiplication
         transformed_image = np.matmul(reshaped_image, inverse_color_matrix.T)
         transformed_image = np.clip(transformed_image, 0, 1)
+
+        # Verbose the transformed image size after matrix multiplication
         if verb_data_dim_analysis >= 2:
-            print(f"[V2:verb_data_dim_analysis] transformed_image shape after matrix multiplication: {transformed_image.shape}")
+            print(
+                f"[V2:verb_data_dim_analysis] transformed_image shape after matrix multiplication: {transformed_image.shape}")
 
         # Reshape back to original image dimensions and convert to int16
         transformed_image = transformed_image.reshape(height, width, 3)
