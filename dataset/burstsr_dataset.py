@@ -282,8 +282,9 @@ class QoocamPNGImage:
         height, width, _ = im_raw.shape
         reshaped_image = im_raw.reshape(-1, 3)
 
-        # Применяем функцию преобразования к каждому пикселю
-        transformed_image = np.array([color_vector_transform(pixel) for pixel in reshaped_image])
+        # Decrecated: Применяем функцию преобразования к каждому пикселю
+        #transformed_image = np.array([color_vector_transform(pixel) for pixel in reshaped_image])
+        transformed_image = reshaped_image
 
         # Преобразуем обратно в двумерное изображение
         transformed_image = transformed_image.reshape(height, width, 3)

@@ -19,5 +19,5 @@ def open_and_show_image_no_interpolation(image_path, scale_factor=5):
     plt.show()
 
 # Пример использования
-image_path = '../output/output_3.png'
+image_path = '../output/output_resized_9.png'
 open_and_show_image_no_interpolation(image_path)
