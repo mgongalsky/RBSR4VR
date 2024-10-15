@@ -299,8 +299,8 @@ class QoocamPNGImage:
             print(f"[V1:verb_data_dim_analysis] im_raw shape after reorganizing channels to RGGB: {im_raw.shape}")
 
         # Scale the image to match expected input levels
-        im_raw = im_raw * 1023.0
-        im_raw = im_raw.astype(np.int16)
+        #im_raw = im_raw * 1023.0
+        #im_raw = im_raw.astype(np.int16)
         if verb_data_dim_analysis >= 1:
             print(f"[V1:verb_data_dim_analysis] im_raw shape after scaling to int16: {im_raw.shape}")
 

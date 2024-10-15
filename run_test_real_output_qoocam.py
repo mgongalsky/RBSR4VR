@@ -131,7 +131,7 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
                 print(f"[V2:verb_data_dim_analysis] Min values per channel before scaling - {min_values_str}")
 
             # Масштабирование значений к диапазону [0, 1]
-            output = net_pred / 1024.0  # Приводим значения в диапазон [0, 1]
+            output = net_pred #/ 1024.0  # Приводим значения в диапазон [0, 1]
 
             # Verbosing после масштабирования
             if verb_data_dim_analysis >= 2:
