@@ -113,9 +113,42 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
             #plt.show()
 
         with torch.no_grad():
+            if verb_data_dim_analysis >= 1:
+                print(f"[V1:verb_data_dim_analysis] torch.no_grad() enabled for inference.")
+
             burst = burst[:, :num_frame, ...]
             net_pred, _ = model(burst)
-            output = net_pred.clamp(0.0, 1.0)
+
+            # Вербозинг: вывод максимальных и минимальных значений для каждого канала до обрезки (clamp)
+            if verb_data_dim_analysis >= 2:
+                max_values = net_pred.max(dim=2)[0].max(dim=2)[0]  # Максимумы по H и W
+                min_values = net_pred.min(dim=2)[0].min(dim=2)[0]  # Минимумы по H и W
+
+                max_values_str = ', '.join([f'C{c}: {max_values[0, c].item():.4f}' for c in range(max_values.shape[1])])
+                min_values_str = ', '.join([f'C{c}: {min_values[0, c].item():.4f}' for c in range(min_values.shape[1])])
+
+                print(f"[V2:verb_data_dim_analysis] Max values per channel before scaling - {max_values_str}")
+                print(f"[V2:verb_data_dim_analysis] Min values per channel before scaling - {min_values_str}")
+
+            # Масштабирование значений к диапазону [0, 1]
+            output = net_pred / 1024.0  # Приводим значения в диапазон [0, 1]
+
+            # Verbosing после масштабирования
+            if verb_data_dim_analysis >= 2:
+                max_values_scaled = output.max(dim=2)[0].max(dim=2)[0]
+                min_values_scaled = output.min(dim=2)[0].min(dim=2)[0]
+
+                max_values_scaled_str = ', '.join(
+                    [f'C{c}: {max_values_scaled[0, c].item():.4f}' for c in range(max_values_scaled.shape[1])])
+                min_values_scaled_str = ', '.join(
+                    [f'C{c}: {min_values_scaled[0, c].item():.4f}' for c in range(min_values_scaled.shape[1])])
+
+                print(f"[V2:verb_data_dim_analysis] Max values per channel after scaling - {max_values_scaled_str}")
+                print(f"[V2:verb_data_dim_analysis] Min values per channel after scaling - {min_values_scaled_str}")
+
+            # Обрезка значений тензора (чтобы все значения были точно в диапазоне [0, 1])
+            output = output.clamp(0.0, 1.0)
+
             save_path = os.path.join(output_dir, f'output_{idx}.png')
             save_image(output.squeeze(), save_path)
 
