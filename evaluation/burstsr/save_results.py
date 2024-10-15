@@ -29,8 +29,7 @@ import numpy as np
 import tqdm
 from admin.environment import env_settings
 
-
-def save_results(setting_name):
+def save_results(setting_name, limit=None):
     """ Saves network outputs on the BurstSR validation set. setting_name denotes the name of the experiment
         setting to be used. """
     expr_module = importlib.import_module('evaluation.burstsr.experiments.{}'.format(setting_name))
@@ -39,7 +38,9 @@ def save_results(setting_name):
 
     base_results_dir = env_settings().save_data_path
 
-    dataset = get_burstsr_val_set()
+    print("Starting to get the dataset...")
+    dataset = get_burstsr_val_set(limit=limit)
+    print(f"Dataset obtained. Length of dataset: {len(dataset)}")
 
     for n in network_list:
         out_dir = '{}/burstsr/{}'.format(base_results_dir, n.get_unique_name())
@@ -49,7 +50,9 @@ def save_results(setting_name):
         device = 'cuda'
         net.to(device).train(False)
 
+        print("Starting to process dataset...")
         for idx in tqdm.tqdm(range(len(dataset))):
+            print(f"Processing index: {idx}")
             data = dataset[idx]
             burst = data['burst'].unsqueeze(0)
             burst_name = data['burst_name']
@@ -62,12 +65,14 @@ def save_results(setting_name):
             with torch.no_grad():
                 net_pred, _ = net(burst)
 
-            net_pred_np = (net_pred.squeeze(0).permute(1, 2, 0).clamp(0.0, 1.0) * 2 ** 14).cpu().numpy().astype(
-                np.uint16)
+            net_pred_np = (net_pred.squeeze(0).permute(1, 2, 0).clamp(0.0, 1.0) * 2 ** 14).cpu().numpy().astype(np.uint16)
 
             # Save predictions as png
             cv2.imwrite('{}/{}.png'.format(out_dir, burst_name), net_pred_np)
 
+            if limit is not None and idx >= limit - 1:
+                print("Limit reached, stopping processing.")
+                break
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Saves network outputs on the BurstSR validation set. setting_name '
@@ -76,4 +81,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    save_results(args.setting)
+    # Ограничьте количество примеров до 64, если запускаете скрипт напрямую
+    save_results(args.setting, limit=32)

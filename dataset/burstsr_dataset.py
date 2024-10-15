@@ -230,13 +230,179 @@ class CanonImage:
         raise NotImplementedError
 
 
+import os
+import torch
+import cv2
+import numpy as np
+
+import numpy as np
+import torch
+import cv2
+
+class QoocamPNGImage:
+    """ Custom class for handling images captured from Qoocam in PNG format """
+
+    @staticmethod
+    def load(path):
+        """
+        Load an image from the specified path.
+        Args:
+            path: Path to the PNG image.
+        Returns:
+            QoocamPNGImage object.
+        """
+        # Load image as RGB
+        im_raw = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        if im_raw is None:
+            raise FileNotFoundError(f"Image not found at path: {path}")
+
+        # Convert BGR (used by OpenCV) to RGB
+        im_raw = cv2.cvtColor(im_raw, cv2.COLOR_BGR2RGB)
+
+        # Normalize to the range [0, 1] for matrix multiplication
+        im_raw = im_raw.astype(np.float32) / 255.0
+
+        # Define the RGB to Samsung transformation matrix and calculate its inverse
+        color_matrix = np.array([[1.2429526, -0.15225857, -0.09069402, 0.0],
+                                 [-0.18403465, 1.4261994, -0.24216475, 0.0],
+                                 [-0.02236049, -0.6038957, 1.6262562, 0.0]])
+        color_matrix = np.array([[1, 0, 0, 0.0],
+                                 [0, 1, 0, 0.0],
+                                 [0, 0, 1, 0.0]])
+        # Calculate the inverse of the color matrix
+        inverse_color_matrix = np.linalg.pinv(color_matrix[:, :3])
+
+        # Perform matrix multiplication to transform RGB to Samsung-RAW-like format
+        height, width, _ = im_raw.shape
+        reshaped_image = im_raw.reshape(-1, 3)  # (height * width, 3)
+        transformed_image = np.matmul(reshaped_image, inverse_color_matrix.T)
+        transformed_image = np.clip(transformed_image, 0, 1)  # Ensure values are in [0, 1]
+
+        # Reshape back to original image dimensions and convert to int16
+        transformed_image = transformed_image.reshape(height, width, 3)
+
+        # Extracting the channels from the transformed image and creating a 4-channel RAW-like format
+        red_channel = transformed_image[:, :, 0]
+        green_channel = transformed_image[:, :, 1]
+        blue_channel = transformed_image[:, :, 2]
+
+        # Reorganize channels to have RGGB format (Red, Green, Green, Blue)
+        im_raw = np.dstack((red_channel, green_channel, green_channel, blue_channel))
+
+        # Scale the image to match expected input levels
+        im_raw = im_raw * 1023.0
+        im_raw = im_raw.astype(np.int16)
+
+        # Transpose to (C, H, W) format
+        im_raw = np.transpose(im_raw, (2, 0, 1))
+
+        # Convert to PyTorch tensor
+        im_raw = torch.from_numpy(im_raw)
+
+        # Set some dummy metadata for compatibility
+        meta_data = {
+            'black_level': [0, 0, 0, 0],
+            'cam_wb': [1.0, 1.0, 1.0, 1.0],
+            'daylight_wb': [1.0, 1.0, 1.0, 1.0],
+            'rgb_xyz_matrix': np.eye(3).tolist(),  # Identity matrix for color transformation
+            'exif_data': {}
+        }
+
+        return QoocamPNGImage(im_raw, meta_data['black_level'], meta_data['cam_wb'],
+                              meta_data['daylight_wb'], meta_data['rgb_xyz_matrix'], meta_data['exif_data'])
+
+    def __init__(self, im_raw, black_level, cam_wb, daylight_wb, rgb_xyz_matrix, exif_data):
+        """
+        Initialize the QoocamPNGImage object with the image data and metadata.
+        """
+        self.im_raw = im_raw
+        self.black_level = black_level
+        self.cam_wb = cam_wb
+        self.daylight_wb = daylight_wb
+        self.rgb_xyz_matrix = rgb_xyz_matrix
+        self.exif_data = exif_data
+
+        # Set normalization factor for the image
+        self.norm_factor = 1023.0
+
+    def get_image_data(self, substract_black_level=False, white_balance=False, normalize=False):
+        """
+        Apply image processing options to the loaded image.
+        Args:
+            substract_black_level: Whether to subtract black level from the image.
+            white_balance: Whether to apply white balance to the image.
+            normalize: Whether to normalize image values.
+        Returns:
+            Processed image tensor.
+        """
+        im_raw = self.im_raw.float()
+
+        if substract_black_level:
+            im_raw = im_raw - torch.tensor(self.black_level).view(4, 1, 1)
+
+        if white_balance:
+            im_raw = im_raw * torch.tensor(self.cam_wb).view(4, 1, 1)
+
+        if normalize:
+            im_raw = im_raw / self.norm_factor
+
+        return im_raw
+
+    def shape(self):
+        """
+        Get the shape of the image.
+        Returns:
+            Tuple representing the shape of the image.
+        """
+        shape = (4, self.im_raw.shape[1], self.im_raw.shape[2])
+        return shape
+
+    def crop_image(self, r1, r2, c1, c2):
+        """
+        Crop the image to the specified coordinates.
+        Args:
+            r1, r2: Row indices for cropping.
+            c1, c2: Column indices for cropping.
+        """
+        self.im_raw = self.im_raw[:, r1:r2, c1:c2]
+
+    def get_crop(self, r1, r2, c1, c2):
+        """
+        Get a cropped portion of the image.
+        Args:
+            r1, r2: Row indices for cropping.
+            c1, c2: Column indices for cropping.
+        Returns:
+            Cropped QoocamPNGImage object.
+        """
+        im_raw = self.im_raw[:, r1:r2, c1:c2]
+        return QoocamPNGImage(im_raw, self.black_level, self.cam_wb, self.daylight_wb, self.rgb_xyz_matrix,
+                              self.exif_data)
+
+    def postprocess(self, return_np=True):
+        """
+        Post-process the image (dummy method for now).
+        Args:
+            return_np: Whether to return the image as a NumPy array.
+        Returns:
+            Processed image.
+        """
+        im_out = self.im_raw.clamp(0, self.norm_factor)
+
+        if return_np:
+            im_out = im_out.permute(1, 2, 0).numpy() / self.norm_factor * 255.0
+            im_out = im_out.astype(np.uint8)
+
+        return im_out
+
+
 class BurstSRDataset(BaseRawBurstDataset):
     """ Real-world burst super-resolution dataset. """
     def __init__(self, root=None, split='train', seq_ids=None, initialize=True):
         """
         args:
             root - Path to root dataset directory
-            split - Can be 'train' or 'val'
+            split - Can be 'train', 'val', or 'val_mine'
             seq_ids - (Optional) List of sequences to load. If specified, the 'split' argument is ignored.
             initialize - boolean indicating whether to load the meta-data for the dataset
         """
@@ -258,13 +424,35 @@ class BurstSRDataset(BaseRawBurstDataset):
         self.burst_list = self._get_burst_list(split, seq_ids)
 
     def _get_burst_list(self, split, seq_ids):
-        burst_list = sorted(os.listdir('{}/{}'.format(self.root, self.split)))
+        # Проверяем, чтобы split не был дублированным
+        if split == 'val_mine':
+            burst_list_path = self.root #os.path.join(self.root, split)
+        else:
+            burst_list_path = os.path.join(self.root, self.split)
+
+        print(f"[DEBUG] Looking for burst list in: {burst_list_path}")
+
+        try:
+            burst_list = sorted(os.listdir(burst_list_path))
+            print(f"[DEBUG] Found burst list: {burst_list}")
+        except FileNotFoundError as e:
+            print(f"[ERROR] Directory not found: {burst_list_path}")
+            raise e
+
         if split is None and seq_ids is not None:
             burst_list = [b for b in burst_list if b[:4] in seq_ids]
-        elif split is not None:
+            print(f"[DEBUG] Filtered burst list by seq_ids: {burst_list}")
+        elif split is not None and split != 'val_mine':
             lispr_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
-            seq_ids = load_txt('{}/data_specs/burstsr_{}.txt'.format(lispr_path, split))
-            burst_list = [b for b in burst_list if b[:4] in seq_ids]
+            txt_path = '{}/data_specs/burstsr_{}.txt'.format(lispr_path, split)
+            print(f"[DEBUG] Loading sequence IDs from: {txt_path}")
+            try:
+                seq_ids = load_txt(txt_path)
+                burst_list = [b for b in burst_list if b[:4] in seq_ids]
+                print(f"[DEBUG] Filtered burst list by text file sequence IDs: {burst_list}")
+            except FileNotFoundError as e:
+                print(f"[ERROR] Sequence ID file not found: {txt_path}")
+                raise e
 
         return burst_list
 
@@ -273,12 +461,19 @@ class BurstSRDataset(BaseRawBurstDataset):
         return burst_info
 
     def _get_raw_image(self, burst_id, im_id):
-        raw_image = SamsungRAWImage.load('{}/{}/{}/samsung_{:02d}'.format(self.root, self.split,
-                                                                          self.burst_list[burst_id], im_id))
+        """
+        Здесь заменяем SamsungRAWImage на QoocamPNGImage.
+        """
+        # Исправляем путь, чтобы не было дублирования 'im_raw.png'
+        image_path = '{}/{}/{}/im_raw.png'.format(self.root, self.split, self.burst_list[burst_id], im_id)
+        raw_image = QoocamPNGImage.load(image_path)  # Загружаем изображение с помощью нового класса
         return raw_image
 
     def _get_gt_image(self, burst_id):
-        canon_im = CanonImage.load('{}/{}/{}/canon'.format(self.root, self.split, self.burst_list[burst_id]))
+        """
+        CanonImage оставим без изменений, поскольку это целевой ground truth.
+        """
+        canon_im = CanonImage.load(os.path.join(self.root, self.split, self.burst_list[burst_id], 'canon'))
         return canon_im
 
     def get_burst(self, burst_id, im_ids, info=None):
@@ -291,12 +486,16 @@ class BurstSRDataset(BaseRawBurstDataset):
         return frames, gt, info
 
 
-def get_burstsr_val_set():
+def get_burstsr_val_set(limit=None, split='val'):
     """ Get the BurstSR validation dataset """
-    burstsr_dataset = BurstSRDataset(split='val', initialize=True)
+    burstsr_dataset = BurstSRDataset(split=split, initialize=True)
     processing_fn = processing.BurstSRProcessing(transform=None, random_flip=False,
                                                  substract_black_level=True,
                                                  crop_sz=80)
     # Train sampler and loader
     dataset = sampler.IndexedBurst(burstsr_dataset, burst_size=14, processing=processing_fn)
+
+    if limit is not None:
+        dataset = dataset[:limit]
+
     return dataset

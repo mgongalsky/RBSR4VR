@@ -83,14 +83,33 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
     PSNR = []
     SSIM = []
 
+    import matplotlib.pyplot as plt
+
     for idx in tqdm.tqdm(range(len(dataset))):
         data = dataset[idx]
-#        gt = data['frame_gt'].get_image_data().unsqueeze(0)
+        # gt = data['frame_gt'].get_image_data().unsqueeze(0)
         burst = torch.stack([frame.get_image_data() for frame in data['burst']]).unsqueeze(0)
         burst_name = data['burst_name']
 
         burst = burst.to(device)
-       # gt = gt.to(device)
+        # gt = gt.to(device)
+
+        # Вербозинг: вывод RGB изображения для каждого кадра в burst
+        for frame_idx in range(burst.shape[1]):
+            frame_tensor = burst[0, frame_idx]  # Извлекаем кадр из burst
+            frame_np = frame_tensor.permute(1, 2, 0).cpu().numpy()  # Транспонируем из (C, H, W) в (H, W, C)
+
+            # Учитываем, что у нас 4 канала, мы хотим сделать RGB изображение, игнорируя четвертый канал
+            frame_rgb = frame_np[:, :, :3]
+
+            # Масштабируем значения от [0, 1] до [0, 255] для корректного отображения
+            frame_rgb = (frame_rgb * 255).astype(np.uint8)
+
+            # Отображаем картинку
+            #plt.imshow(frame_rgb)
+            #plt.title(f"Frame {frame_idx} from Burst {idx}")
+            #plt.axis('off')
+            #plt.show()
 
         with torch.no_grad():
             burst = burst[:, :num_frame, ...]
@@ -99,14 +118,15 @@ def compute_score_BIPnet(model, model_path, num_frame, dataset_root='my_dataset/
             save_path = os.path.join(output_dir, f'output_{idx}.png')
             save_image(output.squeeze(), save_path)
 
-       # PSNR_temp = aligned_psnr_fn(output, gt, burst).cpu().numpy()
-       # PSNR.append(PSNR_temp)
+            # Вербозинг: вывод максимального и минимального значения для каждого канала
+            max_values = output.max(dim=2)[0].max(dim=2)[0]  # Максимумы по H и W
+            min_values = output.min(dim=2)[0].min(dim=2)[0]  # Минимумы по H и W
 
-       # SSIM_temp = aligned_ssim_fn(output, gt, burst).cpu().numpy()
-       # SSIM.append(SSIM_temp)
+            max_values_str = ', '.join([f'C{c}: {max_values[0, c].item():.4f}' for c in range(max_values.shape[1])])
+            min_values_str = ', '.join([f'C{c}: {min_values[0, c].item():.4f}' for c in range(min_values.shape[1])])
 
-    #print(f'PSNR: {np.mean(np.array(PSNR))}, SSIM: {np.mean(np.array(SSIM))}')
-    #return np.mean(np.array(PSNR)), np.mean(np.array(SSIM))
+            print(f"[Image {idx}] Max values per channel - {max_values_str}")
+            print(f"[Image {idx}] Min values per channel - {min_values_str}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-
 # Copyright (c) 2021 Huawei Technologies Co., Ltd.
 # Licensed under CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike 4.0 International) (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,71 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import imp
 import os
 import sys
+import torch
+import random
+import numpy as np
+import cv2
+import tqdm
 
 env_path = os.path.join(os.path.dirname(__file__), '../..')
 if env_path not in sys.path:
     sys.path.append(env_path)
 
-from dataset.synthetic_burst_val_set import SyntheticBurstVal
-import torch
-from torchvision.utils import save_image
-
-
-from models.loss.image_quality_v2 import PSNR, SSIM, LPIPS
-from evaluation.common_utils.display_utils import generate_formatted_report
-import time
-import argparse
-import importlib
-import cv2
-import numpy as np
-import tqdm
-from models.loss.image_quality_v2 import PSNR, SSIM, LPIPS
-from evaluation.common_utils.display_utils import generate_formatted_report
-from models.loss.spatial_color_alignment import SpatialColorAlignment
-import time
-import argparse
-import importlib
-import cv2
-import numpy as np
-import tqdm
-from models.alignment.pwcnet import PWCNet
-from dataset.burstsr_dataset import get_burstsr_val_set
-import random
 from dataset.burstsr_dataset import get_burstsr_val_set, CanonImage
-import cv2
+from torchvision.utils import save_image
+from models.loss.image_quality_v2 import PSNR, SSIM, LPIPS
+from models.alignment.pwcnet import PWCNet
+from utils.metrics import AlignedPSNR, AlignedLPIPS, AlignedSSIM
 
 def setup_seed(seed=0):
-	torch.manual_seed(seed)
-	torch.cuda.manual_seed(seed)
-	torch.cuda.manual_seed_all(seed)
-	np.random.seed(seed)
-	random.seed(seed)
-	# torch.backends.cudnn.enabled = True
-	torch.backends.cudnn.deterministic = True
-	torch.backends.cudnn.benchmark = True
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
 
-def compute_score_BIPnet(model, model_path, num_frame):
-    from utils.metrics import AlignedPSNR, AlignedLPIPS, AlignedSSIM
-    device = 'cuda'             
+def compute_score_BIPnet(model, model_path, num_frame, split='val_mine'):
+    device = 'cuda'
     checkpoint_dict = torch.load(model_path, map_location='cpu')
     model.load_state_dict(checkpoint_dict['net'])
     model = model.to(device).train(False)
     model.eval()
-    model.cuda() 
 
+    # Загрузка сети для выравнивания изображений
     alignment_net = PWCNet(load_pretrained=True, weights_path='pretrained_networks/pwcnet-network-default.pth')
-    alignment_net = alignment_net.cuda()
-    alignment_net = alignment_net.eval()
+    alignment_net = alignment_net.cuda().eval()
+
+    # Метрики для оценки качества изображения
     aligned_psnr_fn = AlignedPSNR(alignment_net=alignment_net)
-    aligned_lpips_fn = AlignedLPIPS(alignment_net=alignment_net)
     aligned_ssim_fn = AlignedSSIM(alignment_net=alignment_net)
 
-    dataset = get_burstsr_val_set()
+    # Загрузка набора данных с использованием 'val_mine'
+    dataset = get_burstsr_val_set(split=split)
     PSNR = []
-    LPIPS = []
     SSIM = []
 
     for idx in tqdm.tqdm(range(len(dataset))):
@@ -96,22 +75,27 @@ def compute_score_BIPnet(model, model_path, num_frame):
             save_path = os.path.join(output_dir, f'output_{idx}.png')
             save_image(output.squeeze(), save_path)
 
+        # Вычисление метрик PSNR и SSIM
+        #PSNR_temp = aligned_psnr_fn(output, gt, burst).cpu().numpy()
+        #PSNR.append(PSNR_temp)
 
-        PSNR_temp = aligned_psnr_fn(output, gt, burst).cpu().numpy()            
-        PSNR.append(PSNR_temp)
-        
-        SSIM_temp = aligned_ssim_fn(output, gt, burst).cpu().numpy()
-        SSIM.append(SSIM_temp)
-    print(f'PSNR: {np.mean(np.array(PSNR))}, SSIM: {np.mean(np.array(SSIM))}')
-    return np.mean(np.array(PSNR)), np.mean(np.array(SSIM))
+        #SSIM_temp = aligned_ssim_fn(output, gt, burst).cpu().numpy()
+        #SSIM.append(SSIM_temp)
+
+    # Печать и возврат среднего значения PSNR и SSIM
+    #print(f'PSNR: {np.mean(np.array(PSNR))}, SSIM: {np.mean(np.array(SSIM))}')
+    #return np.mean(np.array(PSNR)), np.mean(np.array(SSIM))
+
 if __name__ == "__main__":
     import csv
+
     output_dir = 'output'
     os.makedirs(output_dir, exist_ok=True)
 
     setup_seed(0)
     from models.RBSR_test import RBSR
+
     net = RBSR()
     path = "./pretrained_networks/RBSR_realwporld.pth.tar"
-    psnr, ssim = compute_score_BIPnet(net, path, 14)
-
+    #psnr, ssim = (
+    compute_score_BIPnet(net, path, num_frame=14, split='val_mine')
